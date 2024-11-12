@@ -1,6 +1,5 @@
 import { useMqtt } from "../hooks/UseMqtt";
 import DashboardElement from "../components/DashboardElement";
-import DashboardForm from "../components/DashboardPublishForm";
 
 function Dashboard() {
   // Obtener los mensajes de los topics suscritos
@@ -13,18 +12,15 @@ function Dashboard() {
     console.error("Error parsing message data:", error);
   }
 
-  console.log("Mensajes recibidos:", messages); // Agregar este log para depuración
-
   return (
-    <main className="min-h-[100dvh] h-full bg-slate-900 text-slate-100 flex flex-col justify-center items-center gap-6 p-4">
-      <h1 className="font-bold text-xl">Taller MQTT</h1>
-      <div className="w-full max-w-2xl flex flex-col gap-10 justify-center items-center">
-        {/* Formulario para publicar mensajes */}
-        <DashboardForm topic="/test/message" label="Message"/>
-
+    <main className="min-h-screen h-full bg-gray-50 text-gray-800 flex flex-col justify-center items-center p-8">
+      <h1 className="font-bold text-4xl mb-10 text-gray-900">
+        Monitoreo - Establo Cantón La Gloria
+      </h1>
+      <div className="w-full max-w-3xl flex flex-col gap-8 justify-center items-center">
         {/* Elementos para mostrar los mensajes de los topics suscritos */}
-        <div className="flex flex-wrap gap-6 w-full justify-center items-center">
-          <DashboardElement title={"Contador"} value={messageData.counter} />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+          <DashboardElement title={"Dato"} value={messageData.counter} />
           <DashboardElement title={"Nivel de Gases"} value={messageData.gases_detected} />
           <DashboardElement title={"Humo Detectado"} value={messageData.smoke_detected ? "Sí" : "No"} />
           <DashboardElement title={"Temperatura"} value={`${messageData.temperature} °C`} />

@@ -1,8 +1,8 @@
-function DashboardElement({ title, value, unit }) {
+function DashboardElement({ title, value }) {
   return (
-    <div className="p-4 rounded-md bg-slate-50 text-neutral-800 flex flex-col gap-4 justify-center items-center">
-      <h2 className="font-bold text-lg">{title}</h2>
-      <p className="text-2xl">{value} {unit}</p>
+    <div className="p-6 rounded-lg bg-white shadow-md flex flex-col gap-2 justify-center items-center border border-gray-200 transition-transform transform hover:scale-105">
+      <h2 className="font-semibold text-lg text-gray-700">{title}</h2>
+      <p className="text-3xl font-bold text-gray-900">{value}</p>
     </div>
   );
 }
