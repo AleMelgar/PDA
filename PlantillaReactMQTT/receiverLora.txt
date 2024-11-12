@@ -1,0 +1,121 @@
+#include <SPI.h>
+#include <LoRa.h>
+#include <ArduinoJson.h>
+
+
+#define SS D8
+#define RST D0
+#define BUZZER D2
+
+
+String incoming;
+
+
+void setup() {
+  Serial.begin(115200);
+  while (!Serial)
+  ;
+
+
+  Serial.println("LoRa Receiver");
+
+
+  LoRa.setPins(SS, RST);
+  if (!LoRa.begin(915E6)) {
+  Serial.println("Starting LoRa failed!");
+  while (1)
+    ;
+  }
+
+
+  // Configuración de pines
+  pinMode(BUZZER, OUTPUT);
+  digitalWrite(BUZZER, LOW);
+}
+
+
+void loop() {
+  // Intentar parsear el paquete
+  int packetSize = LoRa.parsePacket();
+  if (packetSize) {
+  // Recibimos el paquete
+  incoming = "";
+
+
+  // Leer el paquete
+  while (LoRa.available()) {
+    incoming += (char)LoRa.read();
+  }
+
+
+  Serial.print("Received packet: ");
+  Serial.println(incoming);
+
+
+  // Parsear y actuar según el JSON
+  parseAndAct(incoming);
+  }
+}
+
+
+void parseAndAct(String message) {
+  // Crear un objeto JSON con la librería ArduinoJson
+  StaticJsonDocument<256> doc;  // Tamaño del buffer de JSON, ajusta si es necesario
+
+
+  // Intentar parsear el JSON recibido
+  DeserializationError error = deserializeJson(doc, message);
+  if (error) {
+  Serial.print("Error parsing JSON: ");
+  Serial.println(error.c_str());
+  return;
+  }
+
+
+  // Extraer valores del JSON
+  int counter = doc["counter"];
+  int gasLevel = doc["gases_detected"];
+  bool smokeDetected = doc["smoke_detected"];
+  float temperature = doc["temperature"];
+
+
+  // Imprimir los valores
+  Serial.print("Contador: ");
+  Serial.println(counter);
+  Serial.print("Nivel de gases: ");
+  Serial.println(gasLevel);
+  Serial.print("Humo detectado: ");
+  Serial.println(smokeDetected ? "Sí" : "No");
+  Serial.print("Temperatura: ");
+  Serial.print(temperature);
+  Serial.println(" *C");
+
+
+  // Actuar en base a los valores recibidos
+  if (smokeDetected) {
+  Serial.println("Humo detectado: Activando buzzer");
+  tone(BUZZER, 3000);  // Buzzer a 3000 Hz
+  delay(5000);
+  noTone(BUZZER);
+  }
+
+
+  if (temperature > 34.0) {
+  Serial.println("Temperatura alta: Activando buzzer");
+  tone(BUZZER, 3000);  // Buzzer a 3000 Hz
+  delay(5000);
+  noTone(BUZZER);
+  }
+
+
+  if (gasLevel > 700) {  // Umbral de gases
+  Serial.println("Nivel de gases alto: Activando buzzer");
+  tone(BUZZER, 3000);  // Frecuencia de 3000 Hz
+  delay(1000);
+  noTone(BUZZER);
+  }
+}
+
+
+
+
