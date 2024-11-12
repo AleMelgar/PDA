@@ -1,160 +1,106 @@
 #include <SPI.h>
 #include <LoRa.h>
-#include <ArduinoJson.h>
-#include <ESP8266WiFi.h>
-#include <PubSubClient.h>
+#include <DHT.h>
 
-//*********Configuración de pines y WiFi*********
+
 #define SS D8
 #define RST D0
-#define BUZZER D2
+#define DI0 D1
 
-String incoming;
 
-//***************CONFIGURACIÓN DE RED****************
-const char *ssid = "CAMPNOU";
-const char *passwd = "Barca2010";
+#define DHTPIN D3      // Pin digital donde está conectado el DHT11
+#define DHTTYPE DHT11  // Define el tipo de sensor (DHT11)
 
-//***************CONFIGURACIÓN DE MQTT***************
-char *server = "192.168.68.114"; // Cambia esto a la IP de tu broker
-int port = 1883;
 
-const char *mqtt_user = "alejandro";
-const char *mqtt_password = "12345";
+// Crear una instancia del objeto DHT
+DHT dht(DHTPIN, DHTTYPE);
 
-WiFiClient wlanclient;
-PubSubClient mqttClient(wlanclient);
 
-//***************FUNCIONES PARA PUBLICAR Y SUSCRIBIR***************
-boolean publishToTopic(char *topic, char *message) {
-    return mqttClient.publish(topic, message);
-}
+const int MQ135_PIN = A0;  // MQ-135 Analógico
+const int MQ2_PIN = D4;    // MQ-2 al D4
 
-//***************DEFINICIÓN DE VARIABLES GLOBALES******************
-// Ej. int LED = D2;
+
+int counter = 0;  // Para probar que se manden aunque no sirvan los sensores
+
 
 void setup() {
-    Serial.begin(115200);
-    while (!Serial);
+ Serial.begin(9600);
+ while (!Serial)
+   ;
 
-    Serial.println("LoRa Receiver");
 
-    LoRa.setPins(SS, RST);
-    if (!LoRa.begin(915E6)) {
-        Serial.println("Starting LoRa failed!");
-        while (1);
-    }
+ Serial.println("LoRa Sender");
 
-    // Configuración de pines
-    pinMode(BUZZER, OUTPUT);
-    digitalWrite(BUZZER, LOW);
 
-    // Configurar conexión WiFi
-    WiFi.begin(ssid, passwd);
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(100);
-    }
-    Serial.println("Connected to WiFi");
+ LoRa.setPins(SS, RST, DI0);
+ if (!LoRa.begin(915E6)) {
+   Serial.println("Starting LoRa failed!");
+   while (1)
+     ;
+ }
 
-    // Configurar conexión MQTT
-    mqttClient.setServer(server, port);
-    while (!mqttClient.connected()) {
-        if (mqttClient.connect("ESP-Client", mqtt_user, mqtt_password)) {
-            Serial.println("Connected to MQTT Broker");
-        } else {
-            delay(2000);
-        }
-    }
+
+ // Inicialización del DHT11
+ dht.begin();
+
+
+ // Configuración de pines
+ pinMode(MQ135_PIN, INPUT);
+ pinMode(MQ2_PIN, INPUT);
 }
+
 
 void loop() {
-    // Intentar parsear el paquete
-    int packetSize = LoRa.parsePacket();
-    if (packetSize) {
-        // Recibimos el paquete
-        incoming = "";
+ // MQ-135
+ int mq135Value = analogRead(MQ135_PIN);
+ Serial.print("Lectura del MQ-135: ");
+ Serial.println(mq135Value);
 
-        // Leer el paquete
-        while (LoRa.available()) {
-            incoming += (char)LoRa.read();
-        }
 
-        Serial.print("Received packet: ");
-        Serial.println(incoming);
+ // MQ-2
+ int mq2Value = digitalRead(MQ2_PIN);
+ bool smokeDetected = (mq2Value == LOW);  // El sensor detecta humo cuando está en LOW
+ Serial.println(smokeDetected ? "Humo detectado!" : "No hay humo detectado.");
 
-        // Parsear y actuar según el JSON
-        parseAndAct(incoming);
-    }
 
-    // Mantener la conexión MQTT
-    if (!mqttClient.connected()) {
-        while (!mqttClient.connected()) {
-            Serial.println("Trying to connect to the MQTT broker...");
-            if (mqttClient.connect("ESP-Client", mqtt_user, mqtt_password)) {
-                Serial.println("Connected to MQTT Broker");
-            } else {
-                delay(2000);
-            }
-        }
-    }
-    mqttClient.loop();
+ // DHT11
+ float temperature = dht.readTemperature();
+ if (isnan(temperature)) {
+   Serial.println("Failed to read from DHT sensor!");
+   return;
+ }
+ Serial.print("Temperature: ");
+ Serial.print(temperature);
+ Serial.println(" *C");
+
+
+ // Construir el JSON
+ String jsonMessage = "{";
+ jsonMessage += "\"counter\": " + String(counter) + ",";
+ jsonMessage += "\"gases_detected\": " + String(mq135Value) + ",";
+ jsonMessage += "\"smoke_detected\": " + String(smokeDetected) + ",";
+ jsonMessage += "\"temperature\": " + String(temperature);
+ jsonMessage += "}";
+
+
+ // Enviar el JSON por LoRa
+ Serial.print("Enviando paquete: ");
+ Serial.println(jsonMessage);
+
+
+ LoRa.beginPacket();
+ LoRa.print(jsonMessage);
+ LoRa.endPacket();
+
+
+ counter++;
+
+
+ delay(5000);  // Espera 5 segundos antes de la próxima lectura
 }
 
-void parseAndAct(String message) {
-    // Crear un objeto JSON con la librería ArduinoJson
-    StaticJsonDocument<256> doc;  // Tamaño del buffer de JSON, ajusta si es necesario
 
-    // Intentar parsear el JSON recibido
-    DeserializationError error = deserializeJson(doc, message);
-    if (error) {
-        Serial.print("Error parsing JSON: ");
-        Serial.println(error.c_str());
-        return;
-    }
 
-    // Extraer valores del JSON
-    int counter = doc["counter"];
-    int gasLevel = doc["gases_detected"];
-    bool smokeDetected = doc["smoke_detected"];
-    float temperature = doc["temperature"];
 
-    // Imprimir los valores
-    Serial.print("Contador: ");
-    Serial.println(counter);
-    Serial.print("Nivel de gases: ");
-    Serial.println(gasLevel);
-    Serial.print("Humo detectado: ");
-    Serial.println(smokeDetected ? "Sí" : "No");
-    Serial.print("Temperatura: ");
-    Serial.print(temperature);
-    Serial.println(" *C");
 
-    // Publicar los valores en el broker MQTT
-    char messageBuffer[256];
-    snprintf(messageBuffer, sizeof(messageBuffer), "{\"counter\": %d, \"gases_detected\": %d, \"smoke_detected\": %s, \"temperature\": %.2f}", 
-             counter, gasLevel, smokeDetected ? "true" : "false", temperature);
-    
-    publishToTopic("/test/message", messageBuffer);
 
-    // Actuar en base a los valores recibidos
-    if (smokeDetected) {
- Serial.println("Humo detectado: Activando buzzer");
-        tone(BUZZER, 3000);  // Buzzer a 3000 Hz
-        delay(5000);
-        noTone(BUZZER);
-    }
-
-    if (temperature > 34.0) {
-        Serial.println("Temperatura alta: Activando buzzer");
-        tone(BUZZER, 3000);  // Buzzer a 3000 Hz
-        delay(5000);
-        noTone(BUZZER);
-    }
-
-    if (gasLevel > 700) {  // Umbral de gases
-        Serial.println("Nivel de gases alto: Activando buzzer");
-        tone(BUZZER, 3000);  // Frecuencia de 3000 Hz
-        delay(1000);
-        noTone(BUZZER);
-    }
-}
