@@ -6,6 +6,13 @@ function Dashboard() {
   // Obtener los mensajes de los topics suscritos
   const { messages } = useMqtt();
 
+  let messageData = {};
+  try {
+    messageData = JSON.parse(messages["/test/message"] || "{}");
+  } catch (error) {
+    console.error("Error parsing message data:", error);
+  }
+
   return (
     <main className="min-h-[100dvh] h-full bg-slate-900 text-slate-100 flex flex-col justify-center items-center gap-6 p-4">
       <h1 className="font-bold text-xl">Taller MQTT</h1>
@@ -15,11 +22,10 @@ function Dashboard() {
 
         {/* Elementos para mostrar los mensajes de los topics suscritos */}
         <div className="flex flex-wrap gap-6 w-full justify-center items-center">
-          <DashboardElement title={"Char"} value={messages["/test/comment"]} />
-
-          <DashboardElement title={"Integer"} value={messages["/test/int"]} />
-
-          <DashboardElement title={"Float"} value={messages["/test/float"]} />
+          <DashboardElement title={"Contador"} value={messageData.counter} />
+          <DashboardElement title={"Nivel de Gases"} value={messageData.gases_detected} />
+          <DashboardElement title={"Humo Detectado"} value={messageData.smoke_detected ? "Sí" : "No"} />
+          <DashboardElement title={"Temperatura"} value={`${messageData.temperature} °C`} />
         </div>
       </div>
     </main>

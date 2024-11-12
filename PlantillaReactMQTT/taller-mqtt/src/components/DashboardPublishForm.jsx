@@ -2,17 +2,12 @@ import { useState } from "react";
 import { useMqtt } from "../hooks/UseMqtt";
 
 function DashboardPublishForm({ topic, label }) {
-  // Obtener la función publish del contexto MQTT
   const { publish } = useMqtt();
-  // Estado para almacenar el mensaje a enviar
   const [messageToSend, setMessageToSend] = useState("");
 
-  // Handler para realizar publish a un topic
   const handlePublish = (e) => {
     e.preventDefault();
-
     publish(topic, messageToSend);
-
     setMessageToSend("");
   };
 
