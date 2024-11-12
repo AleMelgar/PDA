@@ -13,6 +13,8 @@ function Dashboard() {
     console.error("Error parsing message data:", error);
   }
 
+  console.log("Mensajes recibidos:", messages); // Agregar este log para depuración
+
   return (
     <main className="min-h-[100dvh] h-full bg-slate-900 text-slate-100 flex flex-col justify-center items-center gap-6 p-4">
       <h1 className="font-bold text-xl">Taller MQTT</h1>
