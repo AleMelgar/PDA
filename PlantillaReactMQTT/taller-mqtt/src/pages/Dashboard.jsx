@@ -1,5 +1,7 @@
+// src/pages/Dashboard.jsx
 import { useMqtt } from "../hooks/UseMqtt";
 import DashboardElement from "../components/DashboardElement";
+import Gauge from "../components/Gauge"; // Importar el nuevo componente
 
 function Dashboard() {
  
@@ -29,9 +31,10 @@ function Dashboard() {
             value={messageData.counter} 
             isAlert={false} 
           />
-          <DashboardElement 
+          <Gauge 
             title={"Nivel de Gases"} 
             value={messageData.gases_detected} 
+            maxValue={1000} // Define el valor máximo que consideres
             isAlert={messageData.gases_detected > gasThreshold} 
           />
           <DashboardElement 
@@ -39,9 +42,10 @@ function Dashboard() {
             value={messageData.smoke_detected ? "Sí" : "No"} 
             isAlert={messageData.smoke_detected} 
           />
-          <DashboardElement 
+          <Gauge 
             title={"Temperatura"} 
-            value={`${messageData.temperature} °C`} 
+            value={messageData.temperature} 
+            maxValue={100} // Define el valor máximo que consideres
             isAlert={messageData.temperature > temperatureThreshold} 
           />
         </div>
