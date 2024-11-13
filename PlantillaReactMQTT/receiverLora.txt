@@ -146,15 +146,15 @@ void parseAndAct(String message) {
 
     if (temperature > 34.0) {
         Serial.println("Temperatura alta: Activando buzzer");
-        tone(BUZZER, 3000);  // Buzzer a 3000 Hz
+        tone(BUZZER, 3000);  
         delay(5000);
         noTone(BUZZER);
     }
 
-    if (gasLevel > 700) {  // Umbral de gases
+    if (gasLevel > 600) {  // Umbral de gases
         Serial.println("Nivel de gases alto: Activando buzzer");
-        tone(BUZZER, 3000);  // Frecuencia de 3000 Hz
-        delay(1000);
+        tone(BUZZER, 3000);  
+        delay(5000);
         noTone(BUZZER);
     }
 }
