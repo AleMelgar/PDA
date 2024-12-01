@@ -3,20 +3,24 @@
 #include <ArduinoJson.h>
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
+#include <Adafruit_NeoPixel.h>
 
 //*********Configuración de pines y WiFi*********
 #define SS D8
 #define RST D0
 #define BUZZER D2
+#define LED_PIN D4
+#define NUM_LEDS 30
 
+Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
 String incoming;
 
 //***************CONFIGURACIÓN DE RED****************
-const char *ssid = "CAMPNOU";
-const char *passwd = "Barca2010";
+const char *ssid = "alejandro-XPS-15-9520";
+const char *passwd = "xOLveCOw";
 
 //***************CONFIGURACIÓN DE MQTT***************
-char *server = "192.168.68.114"; // Cambia esto a la IP de tu broker
+char *server = "172.17.0.1"; // Aca poner la ip que diga docker al poner ip a
 int port = 1883;
 
 const char *mqtt_user = "alejandro";
@@ -27,134 +31,142 @@ PubSubClient mqttClient(wlanclient);
 
 //***************FUNCIONES PARA PUBLICAR Y SUSCRIBIR***************
 boolean publishToTopic(char *topic, char *message) {
-    return mqttClient.publish(topic, message);
+  return mqttClient.publish(topic, message);
 }
 
 //***************DEFINICIÓN DE VARIABLES GLOBALES******************
-// Ej. int LED = D2;
+bool alarmActive = false;
+unsigned long previousMillis = 0;
+unsigned long alarmInterval = 500; 
 
 void setup() {
-    Serial.begin(115200);
-    while (!Serial);
+  Serial.begin(115200);
+  while (!Serial);
 
-    Serial.println("LoRa Receiver");
+  Serial.println("LoRa Receiver");
 
-    LoRa.setPins(SS, RST);
-    if (!LoRa.begin(915E6)) {
-        Serial.println("Starting LoRa failed!");
-        while (1);
+  LoRa.setPins(SS, RST);
+  if (!LoRa.begin(915E6)) {
+    Serial.println("Starting LoRa failed!");
+    while (1);
+  }
+
+  pinMode(BUZZER, OUTPUT);
+  digitalWrite(BUZZER, LOW);
+  strip.begin();
+  strip.show();
+  setLEDColor(0, 0, 0);
+
+  WiFi.begin(ssid, passwd);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(100);
+  }
+  Serial.println("Connected to WiFi");
+
+  mqttClient.setServer(server, port);
+  while (!mqttClient.connected()) {
+    if (mqttClient.connect("ESP-Client", mqtt_user, mqtt_password)) {
+      Serial.println("Connected to MQTT Broker");
+    } else {
+      delay(2000);
     }
-
-    // Configuración de pines
-    pinMode(BUZZER, OUTPUT);
-    digitalWrite(BUZZER, LOW);
-
-    // Configurar conexión WiFi
-    WiFi.begin(ssid, passwd);
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(100);
-    }
-    Serial.println("Connected to WiFi");
-
-    // Configurar conexión MQTT
-    mqttClient.setServer(server, port);
-    while (!mqttClient.connected()) {
-        if (mqttClient.connect("ESP-Client", mqtt_user, mqtt_password)) {
-            Serial.println("Connected to MQTT Broker");
-        } else {
-            delay(2000);
-        }
-    }
+  }
 }
 
 void loop() {
-    // Intentar parsear el paquete
-    int packetSize = LoRa.parsePacket();
-    if (packetSize) {
-        // Recibimos el paquete
-        incoming = "";
-
-        // Leer el paquete
-        while (LoRa.available()) {
-            incoming += (char)LoRa.read();
-        }
-
-        Serial.print("Received packet: ");
-        Serial.println(incoming);
-
-        // Parsear y actuar según el JSON
-        parseAndAct(incoming);
+  int packetSize = LoRa.parsePacket();
+  if (packetSize) {
+    incoming = "";
+    while (LoRa.available()) {
+      incoming += (char)LoRa.read();
     }
 
-    // Mantener la conexión MQTT
-    if (!mqttClient.connected()) {
-        while (!mqttClient.connected()) {
-            Serial.println("Trying to connect to the MQTT broker...");
-            if (mqttClient.connect("ESP-Client", mqtt_user, mqtt_password)) {
-                Serial.println("Connected to MQTT Broker");
-            } else {
-                delay(2000);
-            }
-        }
+    Serial.print("Received packet: ");
+    Serial.println(incoming);
+    parseAndAct(incoming);
+  }
+
+  if (!mqttClient.connected()) {
+    while (!mqttClient.connected()) {
+      Serial.println("Trying to connect to the MQTT broker...");
+      if (mqttClient.connect("ESP-Client", mqtt_user, mqtt_password)) {
+        Serial.println("Connected to MQTT Broker");
+      } else {
+        delay(2000);
+      }
     }
-    mqttClient.loop();
+  }
+
+  mqttClient.loop();
+  handleAlarm(); 
 }
 
-void parseAndAct(String message) {
-    // Crear un objeto JSON con la librería ArduinoJson
-    StaticJsonDocument<256> doc;  // Tamaño del buffer de JSON, ajusta si es necesario
+void parseAndAct(String message) { // Crea el json con los datos que recibe para mandarlo a la web
+  StaticJsonDocument<256> doc;
 
-    // Intentar parsear el JSON recibido
-    DeserializationError error = deserializeJson(doc, message);
-    if (error) {
-        Serial.print("Error parsing JSON: ");
-        Serial.println(error.c_str());
-        return;
-    }
+  DeserializationError error = deserializeJson(doc, message);
+  if (error) {
+    Serial.print("Error parsing JSON: ");
+    Serial.println(error.c_str());
+    return;
+  }
 
-    // Extraer valores del JSON
-    int counter = doc["counter"];
-    int gasLevel = doc["gases_detected"];
-    bool smokeDetected = doc["smoke_detected"];
-    float temperature = doc["temperature"];
+  int counter = doc["counter"];
+  int gasLevel = doc["gases_detected"];
+  bool smokeDetected = doc["smoke_detected"];
+  float temperature = doc["temperature"];
 
-    // Imprimir los valores
-    Serial.print("Contador: ");
-    Serial.println(counter);
-    Serial.print("Nivel de gases: ");
-    Serial.println(gasLevel);
-    Serial.print("Humo detectado: ");
-    Serial.println(smokeDetected ? "Sí" : "No");
-    Serial.print("Temperatura: ");
-    Serial.print(temperature);
-    Serial.println(" *C");
+  Serial.print("Contador: ");
+  Serial.println(counter);
+  Serial.print("Nivel de gases: ");
+  Serial.println(gasLevel);
+  Serial.print("Humo detectado: ");
+  Serial.println(smokeDetected ? "Sí" : "No");
+  Serial.print("Temperatura: ");
+  Serial.print(temperature);
+  Serial.println(" *C");
 
-    // Publicar los valores en el broker MQTT
-    char messageBuffer[256];
-    snprintf(messageBuffer, sizeof(messageBuffer), "{\"counter\": %d, \"gases_detected\": %d, \"smoke_detected\": %s, \"temperature\": %.2f}", 
-             counter, gasLevel, smokeDetected ? "true" : "false", temperature);
-    
-    publishToTopic("/test/message", messageBuffer);
+  char messageBuffer[256];
+  snprintf(messageBuffer, sizeof(messageBuffer), "{\"counter\": %d, \"gases_detected\": %d, \"smoke_detected\": %s, \"temperature\": %.2f}",
+           counter, gasLevel, smokeDetected ? "true" : "false", temperature);
 
-    // Actuar en base a los valores recibidos
-    if (smokeDetected) {
- Serial.println("Humo detectado: Activando buzzer");
-        tone(BUZZER, 3000);  // Buzzer a 3000 Hz
-        delay(5000);
-        noTone(BUZZER);
-    }
+  publishToTopic("/test/message", messageBuffer);
 
-    if (temperature > 34.0) {
-        Serial.println("Temperatura alta: Activando buzzer");
-        tone(BUZZER, 3000);  
-        delay(5000);
-        noTone(BUZZER);
-    }
-
-    if (gasLevel > 600) {  // Umbral de gases
-        Serial.println("Nivel de gases alto: Activando buzzer");
-        tone(BUZZER, 3000);  
-        delay(5000);
-        noTone(BUZZER);
-    }
+  if (smokeDetected || temperature > 34.0 || gasLevel > 600) {
+    alarmActive = true;
+  } else {
+    alarmActive = false;
+  }
 }
+
+void handleAlarm() { // Gestiona la alarma, no deja de sonar hasta que deje de cumplir el if
+  if (alarmActive) {
+    unsigned long currentMillis = millis();
+    if (currentMillis - previousMillis >= alarmInterval) {
+      previousMillis = currentMillis;
+      toggleLEDs(); 
+    }
+    tone(BUZZER, 3000);
+  } else {
+    noTone(BUZZER);
+    setLEDColor(0, 0, 0);
+  }
+}
+
+void toggleLEDs() { 
+  static bool toggle = false;
+  if (toggle) {
+    setLEDColor(255, 255, 255); 
+  } else {
+    setLEDColor(255, 0, 0); 
+  }
+  toggle = !toggle;
+}
+
+void setLEDColor(uint8_t r, uint8_t g, uint8_t b) {
+  for (int i = 0; i < NUM_LEDS; i++) {
+    strip.setPixelColor(i, strip.Color(r, g, b));
+  }
+  strip.show();
+}
+

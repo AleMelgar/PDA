@@ -2,105 +2,82 @@
 #include <LoRa.h>
 #include <DHT.h>
 
-
+//LoRa
 #define SS D8
 #define RST D0
 #define DI0 D1
 
-
-#define DHTPIN D3      // Pin digital donde está conectado el DHT11
-#define DHTTYPE DHT11  // Define el tipo de sensor (DHT11)
-
-
-// Crear una instancia del objeto DHT
+//DHT 11
+#define DHTPIN D3
+#define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
-
-const int MQ135_PIN = A0;  // MQ-135 Analógico
+const int MQ135_PIN = A0;  // MQ-135 al A0
 const int MQ2_PIN = D4;    // MQ-2 al D4
-
 
 int counter = 0;  // Para probar que se manden aunque no sirvan los sensores
 
-
 void setup() {
- Serial.begin(9600);
- while (!Serial)
-   ;
+  Serial.begin(9600);
+  while (!Serial)
+    ;
 
+  Serial.println("LoRa Sender");
 
- Serial.println("LoRa Sender");
+  LoRa.setPins(SS, RST, DI0);
+  if (!LoRa.begin(915E6)) {
+    Serial.println("Starting LoRa failed!");
+    while (1)
+      ;
+  }
 
+  // Inicialización del DHT11
+  dht.begin();
 
- LoRa.setPins(SS, RST, DI0);
- if (!LoRa.begin(915E6)) {
-   Serial.println("Starting LoRa failed!");
-   while (1)
-     ;
- }
-
-
- // Inicialización del DHT11
- dht.begin();
-
-
- // Configuración de pines
- pinMode(MQ135_PIN, INPUT);
- pinMode(MQ2_PIN, INPUT);
+  // Configuración de pines
+  pinMode(MQ135_PIN, INPUT);
+  pinMode(MQ2_PIN, INPUT);
 }
-
 
 void loop() {
- // MQ-135
- int mq135Value = analogRead(MQ135_PIN);
- Serial.print("Lectura del MQ-135: ");
- Serial.println(mq135Value);
+  // MQ-135
+  int mq135Value = analogRead(MQ135_PIN);
+  Serial.print("Lectura del MQ-135: ");
+  Serial.println(mq135Value);
 
+  // MQ-2
+  int mq2Value = digitalRead(MQ2_PIN);
+  bool smokeDetected = (mq2Value == LOW); 
+  Serial.println(smokeDetected ? "Humo detectado!" : "No hay humo detectado.");
 
- // MQ-2
- int mq2Value = digitalRead(MQ2_PIN);
- bool smokeDetected = (mq2Value == LOW);  // El sensor detecta humo cuando está en LOW
- Serial.println(smokeDetected ? "Humo detectado!" : "No hay humo detectado.");
+  // DHT11
+  float temperature = dht.readTemperature();
+  if (isnan(temperature)) {
+    Serial.println("Failed to read from DHT sensor!");
+    return;
+  }
+  Serial.print("Temperature: ");
+  Serial.print(temperature);
+  Serial.println(" *C");
 
+  // Construir el JSON
+  String jsonMessage = "{";
+  jsonMessage += "\"counter\": " + String(counter) + ",";
+  jsonMessage += "\"gases_detected\": " + String(mq135Value) + ",";
+  jsonMessage += "\"smoke_detected\": " + String(smokeDetected) + ",";
+  jsonMessage += "\"temperature\": " + String(temperature);
+  jsonMessage += "}";
 
- // DHT11
- float temperature = dht.readTemperature();
- if (isnan(temperature)) {
-   Serial.println("Failed to read from DHT sensor!");
-   return;
- }
- Serial.print("Temperature: ");
- Serial.print(temperature);
- Serial.println(" *C");
+  // Enviar el JSON por LoRa
+  Serial.print("Enviando paquete: ");
+  Serial.println(jsonMessage);
 
+  LoRa.beginPacket();
+  LoRa.print(jsonMessage);
+  LoRa.endPacket();
 
- // Construir el JSON
- String jsonMessage = "{";
- jsonMessage += "\"counter\": " + String(counter) + ",";
- jsonMessage += "\"gases_detected\": " + String(mq135Value) + ",";
- jsonMessage += "\"smoke_detected\": " + String(smokeDetected) + ",";
- jsonMessage += "\"temperature\": " + String(temperature);
- jsonMessage += "}";
+  counter++;
 
-
- // Enviar el JSON por LoRa
- Serial.print("Enviando paquete: ");
- Serial.println(jsonMessage);
-
-
- LoRa.beginPacket();
- LoRa.print(jsonMessage);
- LoRa.endPacket();
-
-
- counter++;
-
-
- delay(5000);  // Espera 5 segundos antes de la próxima lectura
+  delay(5000);  // Una lectura cada 5 segundos
 }
-
-
-
-
-
 
